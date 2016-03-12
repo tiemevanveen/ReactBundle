@@ -26,11 +26,11 @@ class ReactRenderer
         $this->serverBundlePath = $serverBundlePath;
     }
 
-    public function render($componentName, $propsString, $uuid, $trace)
+    public function render($componentName, $propsString, $uuid, $registeredStores = array(), $trace)
     {
         $serverBundle = $this->loadServerBundle();
         $this->phpExecJs->createContext($this->consolePolyfill()."\n".$serverBundle);
-        $result = json_decode($this->phpExecJs->evalJs($this->wrap($componentName, $propsString, $uuid, $trace)), true);
+        $result = json_decode($this->phpExecJs->evalJs($this->wrap($componentName, $propsString, $uuid, $registeredStores, $trace)), true);
         if ($result['hasErrors']) {
             $this->LogErrors($result['consoleReplayScript']);
             if ($this->failLoud) {
@@ -65,11 +65,32 @@ JS;
         return $console;
     }
 
-    protected function wrap($name, $propsString, $uuid, $trace)
+    protected function initializeReduxStores($registeredStores = array())
+    {
+        if (!is_array($registeredStores) || empty($registeredStores)) {
+            return "";
+        }
+
+        $result = '';
+        foreach ($registeredStores as $storeName => $reduxProps) {
+            $result .= <<<JS
+reduxProps = $reduxProps;
+storeGenerator = ReactOnRails.getStoreGenerator('$storeName');
+store = storeGenerator(reduxProps);
+ReactOnRails.setStore('$storeName', store);
+JS;
+        }
+
+        return $result;
+    }
+
+    protected function wrap($name, $propsString, $uuid, $registeredStores = array(), $trace)
     {
         $traceStr = $trace ? 'true' : 'false';
+        $initializedReduxStores = $this->initializeReduxStores($registeredStores);
         $wrapperJs = <<<JS
 (function() {
+  $initializedReduxStores
   var props = $propsString;
   return ReactOnRails.serverRenderReactComponent({
     name: '$name',
