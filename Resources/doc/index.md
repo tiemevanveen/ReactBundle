@@ -23,24 +23,26 @@ in the *installation chapter* of the Composer documentation.
 Then, enable the bundle by adding the following line in the `app/AppKernel.php`
 file of your project:
 
-    // app/AppKernel.php
+```php
+// app/AppKernel.php
 
-    // ...
-    class AppKernel extends Kernel
+// ...
+class AppKernel extends Kernel
+{
+    public function registerBundles()
     {
-        public function registerBundles()
-        {
-            $bundles = array(
-                // ...
-
-                new Limenius\ReactBundle\LimeniusReactBundle(),
-            );
-
+        $bundles = array(
             // ...
-        }
+
+            new Limenius\ReactBundle\LimeniusReactBundle(),
+        );
 
         // ...
     }
+
+    // ...
+}
+```
 
 ### Step 3: (optional) Configure the bundle
 
@@ -66,10 +68,12 @@ In order to use React components you need to register them in your JavaScript. T
 
 Your code exposing a react component would look like this:
 
-    import ReactOnRails from 'react-on-rails';
-    import RecipesApp from './RecipesAppServer';
-    
-    ReactOnRails.register({ RecipesApp });
+```js
+import ReactOnRails from 'react-on-rails';
+import RecipesApp from './RecipesAppServer';
+
+ReactOnRails.register({ RecipesApp });
+```
 
 Where RecipesApp is the component we want to register in this example.
 
@@ -85,23 +89,27 @@ If not configured otherwise this bundle will try to find your server side JavaSc
 
 You can insert React components in your Twig templates with:
 
-    {{ react_component('RecipesApp', {'props': props}) }}
+```twig
+{{ react_component('RecipesApp', {'props': props}) }}
+```
 
-Where `RecipesApp` is, in this case, the name of our component, and `props` is a JSON encoded string with the array of your strings.
+Where `RecipesApp` is, in this case, the name of our component, and `props` are the props for your component. Props can either be a JSON encoded string or an array. 
 
 For instance, a controller action that will produce a valid props could be:
 
-    /**
-     * @Route("/recipes", name="recipes")
-     */
-    public function homeAction(Request $request)
-    {
-        $serializer = $this->get('serializer');
-        return $this->render('recipe/home.html.twig', [
-            'props' => $serializer->serialize(
-                ['recipes' => $this->get('recipe.manager')->findAll()->recipes], 'json')
-        ]);
-    }
+```php
+/**
+ * @Route("/recipes", name="recipes")
+ */
+public function homeAction(Request $request)
+{
+    $serializer = $this->get('serializer');
+    return $this->render('recipe/home.html.twig', [
+        'props' => $serializer->serialize(
+            ['recipes' => $this->get('recipe.manager')->findAll()->recipes], 'json')
+    ]);
+}
+```
 
 ## Server-side, client-side or both?
 
@@ -109,19 +117,31 @@ You can choose whether your React components will be rendered only client-side, 
 
 If you set the option `rendering` of the twig call, you can override your config (default is to render both server-side and client-side).
 
-    {{ react_component('RecipesApp', {'props': props, 'rendering': 'client-side'}) }}
+```twig
+{{ react_component('RecipesApp', {'props': props, 'rendering': 'client-side'}) }}
+```
 
 Will render the component only client-side, whereas the following code
 
-    {{ react_component('RecipesApp', {'props': props, 'rendering': 'server-side'}) }}
+```twig
+{{ react_component('RecipesApp', {'props': props, 'rendering': 'server-side'}) }}
+```
 
 ... will render the component only server-side (and as a result the dynamic components won't work).
 
 Or both (default):
 
-    {{ react_component('RecipesApp', {'props': props, 'rendering': 'both'}) }}
+```twig
+{{ react_component('RecipesApp', {'props': props, 'rendering': 'both'}) }}
+```
 
 You can explore these options by looking at the generated HTML code.
+
+if you don't need to set any options you can also pass in the props directly: 
+
+```twig
+{{ react_component('RecipesApp', props) }}
+```
 
 ## Debugging
 
@@ -129,7 +149,9 @@ One imporant point when running server-side JavaScript code from PHP is the mana
 
 To enable tracing, you can set a config parameter, as stated above, or you can set it in your template in this way:
 
-    {{ react_component('RecipesApp', {'props': props, 'trace': true}) }}
+```twig
+{{ react_component('RecipesApp', {'props': props, 'trace': true}) }}
+```
 
 Note that in this case you will probably see a React warning like
 
@@ -142,6 +164,40 @@ This warning is harmlesss and will go away when you disable trace in production.
 Server-side rendering should be used in applications where you can cache the resulting HTML using Varnish or something similar. Otherwise, as for every request the server bundle containing React must be copied either to a file (if your runtime is node.js) or via memcpy (if you have the V8Js PHP extension enabled) and re-interpreted, this can have an overhead. Note that would be theoretically possible to precompile the server bundle in the V8Js object, but as after every request is destroyed, due to the stateless nature of most PHP applications, this is not possible in practice. Thus the components that cannot be cached are best rendered client-side.
 
 
+## Redux
 
+If you're using [Redux](http://redux.js.org/) you could use the bundle to hydrate your store's:
 
+Use `redux_store` in your twig file before you render your components depending on your store:
 
+```twig
+{{ redux_store('MySharedReduxStore', initialState ) }}
+{{ react_component('RecipesApp') }}
+```
+`MySharedReduxStore` here is the identifier you're using in your javascript to get the store. The `initialState` can either be a JSON encoded string or an array. 
+
+Then, expose your store in your bundle, just like your exposed your components:
+
+```js
+import ReactOnRails from 'react-on-rails';
+import RecipesApp from './RecipesAppServer';
+import configureStore from './store/configureStore';
+
+ReactOnRails.registerStore({ configureStore });
+ReactOnRails.register({ RecipesApp });
+```
+
+Finally use `ReactOnRails.getStore` where you would have used your the object you passed into `registerStore`.
+
+```js
+// Get hydrated store
+const store = ReactOnRails.getStore('MySharedReduxStore');
+
+return (
+  <Provider store={store}>
+    <Scorecard />
+  </Provider>
+);
+```
+
+Make sure you use the same identifier here (`MySharedReduxStore`) as you used in your twig file to set up the store. 
